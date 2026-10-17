@@ -11,9 +11,9 @@
 #include "lwip/sys.h"
 #include "esp_netif.h"
 
-#define ESP_WIFI_SSID       ""    //Wifi name here
-#define ESP_WIFI_PASSWORD   ""    //Wifi Password here
-
+#define ESP_WIFI_SSID       "/* WiFi name */"
+#define ESP_WIFI_PASSWORD   "/* WiFi password */"
+#define MAX_RETRIES         5
 
 static int retry_number = 0;
 
@@ -22,14 +22,14 @@ void run_on_event(void* handler_arg,
                   int32_t event_id, 
                   void* event_data){
     if(event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START){
-        esp_wifi_connect();
+        ESP_ERROR_CHECK(esp_wifi_connect());
         ESP_LOGI("Connected");
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED){
         if (retry_number < MAX_RETRIES){
-            esp_wifi_connect();
+            ESP_ERROR_CHECK(esp_wifi_connect());
             retry_number++;
         } else {
-            ESP_LOGI("Connection Failed");
+            ESP_LOGI("Connection Failed"); // these wont be read anyways, I'm trying to do this the hard way
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
@@ -43,10 +43,10 @@ void wifi_start(){
 
     wifi_init_config_t wifi_init_config = WIFI_INIT_CONFIG_DEFAULT();
 
-    esp_netif_init();
-    esp_event_loop_create_default();
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
     esp_netif_create_default_wifi_sta();
-    esp_wifi_init(&wifi_init_config);
+    ESP_ERROR_CHECK(esp_wifi_init(&wifi_init_config));
 
     // config
 
@@ -71,7 +71,13 @@ void wifi_start(){
 }
 
 void app_main(void){
-    nvs_flash_init();
+    esp_err_t nvs_error = nvs_flash_init();
+
+    if (nvs_error == ESP_ERR_NVS_NO_FREE_PAGES || nvs_error == ESP_ERR_NOT_FOUND){
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        nvs_error = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(nvs_flash_init());
 
     wifi_start();
 }
