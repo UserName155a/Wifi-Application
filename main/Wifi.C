@@ -1,15 +1,15 @@
 #include <string.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/event_groups.h"
-#include "esp_system.h"
-#include "esp_wifi.h"
-#include "esp_event.h"
-#include "esp_log.h"
-#include "nvs_flash.h"
-#include "lwip/err.h"
-#include "lwip/sys.h"
-#include "esp_netif.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/event_groups.h>
+#include <esp_system.h>
+#include <esp_wifi.h>
+#include <esp_event.h>
+#include <esp_log.h>
+#include <nvs_flash.h>
+#include <lwip/err.h>
+#include <lwip/sys.h>
+#include <esp_netif.h>
 
 #define ESP_WIFI_SSID       "/* WiFi name */"
 #define ESP_WIFI_PASSWORD   "/* WiFi password */"
@@ -64,8 +64,11 @@ void wifi_start(){
 
     esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
 
-    esp_wifi_set_protocol(ifx, WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G);
-    esp_wifi_config_11b_rate(ifx, true) 
+    // 802.11gn protocol
+    uint8_t protocol = WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N;
+    esp_wifi_set_protocol(WIFI_IF_STA, protocol);
+    esp_wifi_config_11b_rate(WIFI_IF_STA, true); //disables 802.11b
+    esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW40); 
 
     esp_wifi_start();
 }
@@ -77,7 +80,7 @@ void app_main(void){
         ESP_ERROR_CHECK(nvs_flash_erase());
         nvs_error = nvs_flash_init();
     }
-    ESP_ERROR_CHECK(nvs_flash_init());
+    ESP_ERROR_CHECK(nvs_error);
 
     wifi_start();
 }
