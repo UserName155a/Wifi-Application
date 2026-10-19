@@ -156,7 +156,8 @@ static void UDP_Task_RX_TX(void * Parameter){
         if(Parameter == (void *)"RX"){
             while(true){
                 struct sockaddr_storage Sender_Addr;
-                int len = recvfrom(sock, RX_Buffer, sizeof(RX_Buffer) - 1, 0, (struct sockaddr *)&Sender_Addr, (socklen_t *)&sizeof(Sender_Addr));
+                socklen_t socklen = sizeof(Sender_Addr);
+                int len = recvfrom(sock, RX_Buffer, sizeof(RX_Buffer) - 1, 0, (struct sockaddr *)&Sender_Addr, &socklen);
 
                 if (len < 0){
                     ESP_LOGI(TAG_UDP, "Message failed to receive: error %d", errno);
@@ -199,7 +200,7 @@ void app_main(void){
     }
     ESP_ERROR_CHECK(NVS_Error);
 
-    ESP_ERROR_CHECK(wifi_start());
+    wifi_start();
 
     xTaskCreate(UDP_Task_RX_TX, "UDP single message send/receive", 4096, (void *)"TX", 1, NULL);
 }
