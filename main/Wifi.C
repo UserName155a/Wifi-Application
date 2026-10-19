@@ -16,30 +16,36 @@
 #define MAX_RETRIES             5
 #define ESP_WIFI_MAC_ADDRESS    {} /* MAC Address in hexadecimal*/
 
-static const char *TAG = "WiFi.C";
+#define TARGET_IP_ADDRESS       ""
+#define TARGET_PORT             3333
+
+static const char *TAG_WIFI =   "WiFi.C > WIFI";
+static const char *TAG_UDP =    "WiFi.C > UDP";
 static int retry_number = 0;
 
-void run_on_event(void* handler_arg, 
+static const char *Message =    "The Fool that doesn't belong in this era;\nThe Mysterious Ruler above the Gray Fog;\nThe King of Yellow and Black who wields good luck.";
+
+static void run_on_event(void* handler_arg, 
                   esp_event_base_t event_base, 
                   int32_t event_id, 
                   void* event_data){
     if(event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START){
         ESP_ERROR_CHECK(esp_wifi_connect());
-        ESP_LOGI(TAG, "Connected");
+        ESP_LOGI(TAG_WIFI, "Connected");
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED){
         if (retry_number < MAX_RETRIES){
             ESP_ERROR_CHECK(esp_wifi_connect());
             retry_number++;
         } else {
-            ESP_LOGI(TAG, "Connection Failed"); 
+            ESP_LOGI(TAG_WIFI, "Connection Failed"); 
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
-        ESP_LOGI(TAG, "Connected");
+        ESP_LOGI(TAG_WIFI, "Connected");
     }
 }
 
-void wifi_start(){
+static void wifi_start(void){
 
     // init
 
@@ -111,18 +117,93 @@ void wifi_start(){
     ESP_ERROR_CHECK(esp_wifi_start());
 }
 
+static void UDP_Task_RX_TX(void * Parameter){
+
+    char RX_Buffer[256];
+    char Target_IP[] = TARGET_IP_ADDRESS;
+    int Address_Type = 0;               //keep like this just in case if I need to add IPv6 3 weeks from now
+    int Comm_Protocol = 0;
+
+    while(true){
+        struct sockaddr_in Target_Addr = {
+            .sin_addr = {
+                .s_addr = 0,
+            },
+            .sin_family = AF_INET,
+            .sin_port = TARGET_PORT,
+        }
+        addr_family = AF_INET;
+        Protocol = IPPROTO_UDP;
+        int Address_Status = inet_pton(AF_INET, TARGET_IP_ADDRESS, Target_Addr.sin_addr.s_addr);
+
+        if (Address_Status < 0){
+            ESP_LOGI(TAG_UDP, "IP Address invalid: error %d", errno)
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            continue;
+        }
+
+        int sock = socket(addr_family, SOCK_DGRAM, Protocol);
+        if (sock < 0) {
+            ESP_LOGI(TAG_UDP, "Socket creation failed: error: %d", errno);
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            continue;
+        }
+
+        struct timeval timeout{
+            .tv_sec =   10;
+            .tv_usec =  0;
+        }
+        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+
+        ESP_LOGI(TAG_UDP, "Socket creation successful, target: %d:%d",TARGET_IP_ADDRESS, TARGET_PORT);
+
+        if(Parameter === (void *)"RX"){
+            while(true){
+                struct sockaddr_storage Sender_Addr;
+                int Recv_Err = recvfrom(sock, RX_Buffer, sizeof(RX_Buffer) - 1, 0, (struct sockaddr *)&Sender_Addr, (socklent_t)sizeof(Sender_Addr));
+
+                if (Recv_Err < 0){
+                    ESP_LOGI(TAG_UDP, "Message failed to receive: error %d", errno);
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                    continue;
+                } 
+                RX_Buffer[len] = 0;
+                ESP_LOGI(TAG_UDP, "%d bytes received; sender: %s", Sender_Addr);
+                break;
+            }
+        }
+        else {
+            while(true){
+                int Outgoing_Err = sendto(sock, message, strlen(message), 0, (struct sockaddr *)&dest_addr, sizeof(Target_Addr));
+                if (Outgoing_Err < 0){
+                    ESP_LOGI(TAGE_UDP, "Message failed to send: error %d", errno);
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                    continue;
+                }
+
+                ESP_LOGI(TAGE_UDP, "Message sent!");
+                break;
+            }
+        }
+        close(sock);
+        vTaskDelete(NULL);
+    }
+}
 extern "C" {
     void app_main(void);
 }
 
 void app_main(void){
-    esp_err_t nvs_error = nvs_flash_init();
 
+    //System Flash
+    esp_err_t NVS_Error = nvs_flash_init();
     if (nvs_error == ESP_ERR_NVS_NO_FREE_PAGES || nvs_error == ESP_ERR_NOT_FOUND){
         ESP_ERROR_CHECK(nvs_flash_erase());
-        nvs_error = nvs_flash_init();
+        NVS_Error = nvs_flash_init();
     }
-    ESP_ERROR_CHECK(nvs_error);
+    ESP_ERROR_CHECK(NVS_Error);
 
-    wifi_start();
+    ESP_ERROR_CHECK(wifi_start());
+
+    xTaskCreate(UDP_Task_RX_TX, "UDP single message send/receive", 4096, (void *)"TX", 1, NULL);
 }
