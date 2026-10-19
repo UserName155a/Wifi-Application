@@ -45,7 +45,7 @@ static void run_on_event(void* handler_arg,
     }
 }
 
-static void wifi_start(void){
+static void wifi_start(){
 
     // init
 
@@ -125,44 +125,40 @@ static void UDP_Task_RX_TX(void * Parameter){
     int Comm_Protocol = 0;
 
     while(true){
-        struct sockaddr_in Target_Addr = {
-            .sin_addr = {
-                .s_addr = 0,
-            },
-            .sin_family = AF_INET,
-            .sin_port = TARGET_PORT,
-        }
-        addr_family = AF_INET;
-        Protocol = IPPROTO_UDP;
-        int Address_Status = inet_pton(AF_INET, TARGET_IP_ADDRESS, Target_Addr.sin_addr.s_addr);
+        struct sockaddr_in Target_Addr;
+        Target_Addr.sin_addr.s_addr = 0;
+        Target_Addr.sin_family = AF_INET;
+        Target_Addr.sin_port = htons(TARGET_PORT);
+        Address_Type = AF_INET;
+        Comm_Protocol = IPPROTO_UDP;
+        int Address_Status = inet_pton(AF_INET, Target_IP, (void *)&Target_Addr.sin_addr.s_addr);
 
         if (Address_Status < 0){
-            ESP_LOGI(TAG_UDP, "IP Address invalid: error %d", errno)
+            ESP_LOGI(TAG_UDP, "IP Address invalid: error %d", errno);
             vTaskDelay(pdMS_TO_TICKS(1000));
             continue;
         }
 
-        int sock = socket(addr_family, SOCK_DGRAM, Protocol);
+        int sock = socket(Address_Type, SOCK_DGRAM, Comm_Protocol);
         if (sock < 0) {
             ESP_LOGI(TAG_UDP, "Socket creation failed: error: %d", errno);
             vTaskDelay(pdMS_TO_TICKS(1000));
             continue;
         }
 
-        struct timeval timeout{
-            .tv_sec =   10;
-            .tv_usec =  0;
-        }
+        struct timeval timeout;
+        timeout.tv_sec =    10;
+        timeout.tv_usec =   0;
         setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
         ESP_LOGI(TAG_UDP, "Socket creation successful, target: %d:%d",TARGET_IP_ADDRESS, TARGET_PORT);
 
-        if(Parameter === (void *)"RX"){
+        if(Parameter == (void *)"RX"){
             while(true){
                 struct sockaddr_storage Sender_Addr;
-                int Recv_Err = recvfrom(sock, RX_Buffer, sizeof(RX_Buffer) - 1, 0, (struct sockaddr *)&Sender_Addr, (socklent_t)sizeof(Sender_Addr));
+                int len = recvfrom(sock, RX_Buffer, sizeof(RX_Buffer) - 1, 0, (struct sockaddr *)&Sender_Addr, (socklen_t *)&sizeof(Sender_Addr));
 
-                if (Recv_Err < 0){
+                if (len < 0){
                     ESP_LOGI(TAG_UDP, "Message failed to receive: error %d", errno);
                     vTaskDelay(pdMS_TO_TICKS(1000));
                     continue;
@@ -174,14 +170,14 @@ static void UDP_Task_RX_TX(void * Parameter){
         }
         else {
             while(true){
-                int Outgoing_Err = sendto(sock, message, strlen(message), 0, (struct sockaddr *)&dest_addr, sizeof(Target_Addr));
+                int Outgoing_Err = sendto(sock, Message, strlen(Message), 0, (struct sockaddr *)&Target_Addr, sizeof(Target_Addr));
                 if (Outgoing_Err < 0){
-                    ESP_LOGI(TAGE_UDP, "Message failed to send: error %d", errno);
+                    ESP_LOGI(TAG_UDP, "Message failed to send: error %d", errno);
                     vTaskDelay(pdMS_TO_TICKS(1000));
                     continue;
                 }
 
-                ESP_LOGI(TAGE_UDP, "Message sent!");
+                ESP_LOGI(TAG_UDP, "Message sent!");
                 break;
             }
         }
@@ -197,7 +193,7 @@ void app_main(void){
 
     //System Flash
     esp_err_t NVS_Error = nvs_flash_init();
-    if (nvs_error == ESP_ERR_NVS_NO_FREE_PAGES || nvs_error == ESP_ERR_NOT_FOUND){
+    if (NVS_Error == ESP_ERR_NVS_NO_FREE_PAGES || NVS_Error == ESP_ERR_NOT_FOUND){
         ESP_ERROR_CHECK(nvs_flash_erase());
         NVS_Error = nvs_flash_init();
     }
